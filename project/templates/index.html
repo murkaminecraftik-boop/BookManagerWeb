@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Athenaeum — personal library collection manager with global book search and ratings.">
+    <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#14110d" media="(prefers-color-scheme: dark)">
+    <title>Catalog — Athenaeum</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f6b62'/%3E%3Cpath d='M20 15h9a6 6 0 0 1 6 6 6 6 0 0 1 6-6h9v28h-9a6 6 0 0 0-6 6 6 6 0 0 0-6-6h-9z' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .flash-msg{display:flex;align-items:flex-start;gap:10px;transition:opacity .35s ease,transform .35s ease}
+        .flash-msg.ath-leaving{opacity:0;transform:translateY(-8px)}
+        .ath-toast-close{margin-left:auto;flex:none;background:transparent;border:0;color:inherit;opacity:.55;cursor:pointer;padding:2px 4px;line-height:0}
+        .ath-toast-close:hover{opacity:1}
+        .ath-toast-close svg{width:14px;height:14px}
+        .ath-skeleton{height:64px;border-radius:14px;margin-bottom:10px;background:linear-gradient(90deg,rgba(127,127,127,.12) 25%,rgba(127,127,127,.22) 37%,rgba(127,127,127,.12) 63%);background-size:400% 100%;animation:ath-shimmer 1.3s ease infinite}
+        @keyframes ath-shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+        .ath-result-count{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;opacity:.6;margin:2px 0 10px}
+        .ath-shake{animation:ath-shake .45s ease}
+        @keyframes ath-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+        .ath-empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 0}
+        .ath-empty-icon{font-size:44px;line-height:1}
+        .ath-hint{display:flex;align-items:center;gap:6px;font-size:.78rem;opacity:.55;margin-top:10px;flex-wrap:wrap}
+        .ath-kbd{font:inherit;font-size:.7rem;font-weight:700;border:1px solid currentColor;border-radius:6px;padding:1px 7px}
+        .ath-hint a{font-weight:700;text-decoration:underline}
+        .user-chip{min-width:0}
+        .user-chip .stat-label{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .rating-form{display:inline-flex;gap:3px}
+        .star-btn{background:none;border:0;padding:0 1px;font:inherit;font-size:17px;line-height:1;color:rgba(150,142,125,.4);cursor:pointer;transition:transform .12s ease,color .12s ease}
+        .star-btn:hover,.star-btn:focus-visible{transform:scale(1.2);color:#f0a72e;outline:none}
+        .star-btn.star-filled{color:#f0a72e}
+        .star-display{display:inline-flex;gap:3px;font-size:15px;line-height:1;color:rgba(150,142,125,.4)}
+        .star-display .star-filled{color:#f0a72e}
+        .rating-meta{font-size:.72rem;opacity:.7;margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .rating-login-hint{font-size:.7rem;text-decoration:underline}
+        @media (prefers-reduced-motion:reduce){.ath-skeleton,.ath-shake,.star-btn{animation:none;transition:none}}
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+</head>
+<body>
+    <div class="app-container page-enter-animation">
+        <header class="app-header">
+            <div>
+                <h1 class="brand-title">Athenaeum</h1>
+                <p class="brand-subtitle">Personal Library Collection Manager</p>
+            </div>
+            <div class="header-controls">
+                {% if current_user %}
+                <div class="stat-card user-chip" title="Signed in as {{ current_user['username'] }}">
+                    <div class="stat-number">{{ current_user['username'][:1]|upper }}</div>
+                    <div class="stat-label">{{ current_user['username'] }}</div>
+                </div>
+                <form action="{{ url_for('logout') }}" method="POST" class="inline-form">
+                    <button type="submit" class="btn btn-secondary animated-btn" aria-label="Log out">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></span>
+                        <span>Logout</span>
+                    </button>
+                </form>
+                {% else %}
+                <a href="{{ url_for('login', next=request.path) }}" class="btn btn-secondary animated-btn">
+                    <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+                    <span>Log In</span>
+                </a>
+                <a href="{{ url_for('signup') }}" class="btn btn-primary animated-btn">
+                    <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></span>
+                    <span>Sign Up</span>
+                </a>
+                {% endif %}
+                <button class="btn btn-secondary animated-btn" onclick="openFavoritesModal()" id="favMenuBtn" aria-label="Open saved books and collections">
+                    <span class="btn-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg></span>
+                    <span><span id="favCount">0</span> Saved</span>
+                </button>
+                <button class="theme-toggle animated-btn" onclick="toggleTheme()" id="themeBtn" aria-label="Toggle color theme">
+                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.4"/><path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></svg>
+                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 14.1A8.6 8.6 0 0 1 9.9 3.4a8.6 8.6 0 1 0 10.7 10.7z"/></svg>
+                </button>
+                <div class="stat-card">
+                    <div class="stat-number" id="statTotal">{{ total_books }}</div>
+                    <div class="stat-label">Total Books</div>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-card">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages" role="status" aria-live="polite">
+                        {% for category, message in messages %}
+                            <div class="flash-msg flash-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="toolbar">
+                <form action="{{ url_for('index') }}" method="GET" id="filterForm" class="toolbar-search-form">
+                    <input type="text" name="search" id="librarySearch" class="input-styled toolbar-height" placeholder="Search your library by title…" value="{{ search_query }}" autocomplete="off" aria-label="Search your library by title">
+
+                    <div class="custom-select-wrapper" id="customSort" data-submit="filter">
+                        <div class="custom-select-trigger toolbar-height">
+                            <span id="sortLabel">
+                                {% if request.args.get('sort') == 'asc' %}Oldest First
+                                {% elif request.args.get('sort') == 'desc' %}Newest First
+                                {% else %}Sort: Default{% endif %}
+                            </span>
+                            <span class="select-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+                        </div>
+                        <div class="custom-select-options">
+                            <div class="custom-option" data-value="">Sort: Default</div>
+                            <div class="custom-option" data-value="asc">Oldest First</div>
+                            <div class="custom-option" data-value="desc">Newest First</div>
+                        </div>
+                        <input type="hidden" name="sort" id="sortInput" value="{{ request.args.get('sort', '') }}">
+                    </div>
+                </form>
+
+                <div class="toolbar-actions">
+                    <button class="btn btn-accent animated-btn toolbar-height" onclick="openModal()">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><ellipse cx="12" cy="12" rx="4.2" ry="9"/></svg></span>
+                        <span>Find Real Books</span>
+                    </button>
+                    <a href="{{ url_for('add') }}" class="btn btn-primary animated-btn toolbar-height">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                        <span>Manual Entry</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="ath-hint">Press <span class="ath-kbd">/</span> to search · <span class="ath-kbd">Esc</span> to close dialogs{% if not current_user %} · <a href="{{ url_for('login', next=request.path) }}">Log in</a> to rate books{% endif %}</div>
+
+            <div class="table-scroll">
+                <table class="book-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Title</th>
+                            <th scope="col">Author</th>
+                            <th scope="col">Year</th>
+                            <th scope="col">Genre</th>
+                            <th scope="col">Rating</th>
+                            <th scope="col" style="text-align: right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for book in books %}
+                        <tr class="table-row-animated">
+                            <td class="book-title-cell">{{ book['title'] }}</td>
+                            <td>{{ book['author'] }}</td>
+                            <td><strong>{{ book['year'] }}</strong></td>
+                            <td><span class="badge-genre">{{ book['genre'] }}</span></td>
+                            <td>
+                                {% if current_user %}
+                                <form action="{{ url_for('rate', book_id=book['id']) }}" method="POST" class="rating-form" data-current="{{ book['my_rating'] or 0 }}">
+                                    {% for star in [1, 2, 3, 4, 5] %}
+                                    <button type="submit" name="rating" value="{{ star }}" class="star-btn" data-value="{{ star }}" title="Rate {{ star }} star{{ 's' if star != 1 }}" aria-label="Rate this book {{ star }} out of 5">★</button>
+                                    {% endfor %}
+                                </form>
+                                {% else %}
+                                {% set shown = (book['avg_rating'] or 0)|round(0, 'floor')|int %}
+                                <div class="star-display" aria-hidden="true">
+                                    {% for star in [1, 2, 3, 4, 5] %}<span class="{{ 'star-filled' if star <= shown else '' }}">★</span>{% endfor %}
+                                </div>
+                                {% endif %}
+                                <div class="rating-meta">
+                                    {% if book['avg_rating'] is not none %}
+                                    <span>{{ book['avg_rating'] }} avg · {{ book['rating_count'] }} rating{{ 's' if book['rating_count'] != 1 }}</span>
+                                    {% else %}
+                                    <span>No ratings yet</span>
+                                    {% endif %}
+                                    {% if not current_user %}
+                                    <a class="rating-login-hint" href="{{ url_for('login', next=request.path) }}">Log in to rate</a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="actions-cell">
+                                <a href="{{ url_for('edit', id=book['id']) }}" class="btn btn-edit-outline animated-btn btn-sm">
+                                    <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></span>
+                                    <span>Edit</span>
+                                </a>
+                                <form action="{{ url_for('delete', id=book['id']) }}" method="POST" class="inline-form" onsubmit="return confirm('Are you sure you want to permanently delete this book from your database?');">
+                                    <button type="submit" class="btn btn-danger-outline animated-btn btn-sm">
+                                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6"/></svg></span>
+                                        <span>Delete</span>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                            {% if search_query %}
+                            <tr><td colspan="6" class="empty-note">
+                                <div class="ath-empty">
+                                    <div class="ath-empty-icon">🔍</div>
+                                    <p>No titles match "{{ search_query }}".</p>
+                                    <a href="{{ url_for('index') }}" class="btn btn-secondary animated-btn btn-sm"><span>Clear search</span></a>
+                                </div>
+                            </td></tr>
+                            {% else %}
+                            <tr><td colspan="6" class="empty-note">
+                                <div class="ath-empty">
+                                    <div class="ath-empty-icon">📚</div>
+                                    <p>Your library is waiting for its first book.</p>
+                                    <a href="{{ url_for('add') }}" class="btn btn-primary animated-btn btn-sm"><span>Add your first book</span></a>
+                                </div>
+                            </td></tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="apiModal" role="dialog" aria-modal="true" aria-label="Global book search">
+        <div class="modal-content modal-animated">
+            <div id="searchView" class="modal-view active">
+                <div class="modal-header-standard">
+                    <h2 class="modal-heading">Global Database</h2>
+                    <button class="btn btn-secondary animated-btn btn-icon-only" onclick="closeModal()" aria-label="Close">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="api-search-controls">
+                        <input type="text" id="apiSearchInput" class="input-styled api-search-input" placeholder="Search by title, author, or keywords (e.g. Dune, Tolkien, 1984)…" autocomplete="off" aria-label="Search the global database">
+                        <div class="api-search-row">
+                            <div class="custom-select-wrapper" id="customApiGenre">
+                                <div class="custom-select-trigger">
+                                    <span id="apiGenreLabel">Any Genre</span>
+                                    <span class="select-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+                                </div>
+                                <div class="custom-select-options">
+                                    <div class="custom-option" data-value="">Any Genre</div>
+                                    <div class="genre-header-label">Fiction</div>
+                                    <div class="custom-option" data-value="fiction">Fiction</div>
+                                    <div class="custom-option" data-value="fantasy">Fantasy</div>
+                                    <div class="custom-option" data-value="science_fiction">Sci-Fi</div>
+                                    <div class="genre-header-label">Non-Fiction</div>
+                                    <div class="custom-option" data-value="history">History</div>
+                                    <div class="custom-option" data-value="science">Science &amp; Nature</div>
+                                </div>
+                                <input type="hidden" id="apiGenreValue" value="">
+                            </div>
+                            <button class="btn btn-primary animated-btn" id="apiSearchBtn" onclick="searchAPI()">
+                                <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></span>
+                                <span>Search</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="api-results-scroll">
+                        <div id="apiResultsContainer" aria-live="polite"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="detailsView" class="modal-view">
+                <div class="book-landscape-header" id="detHeader">
+                    <button onclick="backToSearch()" class="modal-back-btn" type="button" aria-label="Back to search results">
+                        <svg class="back-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                        <span>Back</span>
+                    </button>
+                    <div class="book-landscape-overlay" id="detOverlay"></div>
+                    <div class="book-landscape-content">
+                        <img id="detCover" class="book-cover-sharp" src="" alt="Cover" onerror="athCoverFallback(this)">
+                        <div class="book-meta-overlay">
+                            <h2 class="book-title-overlay" id="detTitle">Title</h2>
+                            <div class="book-meta-sub" id="detAuthor">Author • Year</div>
+                            <span class="badge-genre" id="detGenre">Genre</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="details-scroll-body" id="detDesc">Loading description…</div>
+                <div class="details-actions">
+                    <button class="btn btn-primary animated-btn" id="detAddBtn" style="flex: 1 1 auto;">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                        <span>Add to Library</span>
+                    </button>
+                    <button class="btn btn-secondary animated-btn" id="detFavBtn" onclick="toggleFavorite()">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg></span>
+                        <span>Favorite</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="favoritesModalOverlay" role="dialog" aria-modal="true" aria-label="Saved books and collections">
+        <div class="modal-content modal-animated fav-modal-layout" id="favoritesModalContent">
+            <div class="fav-sidebar">
+                <h3 class="fav-sidebar-title">Collections</h3>
+                <ul id="collectionsSidebarList" class="fav-collections-list"></ul>
+                <div style="margin-top: auto; padding-top: 18px;">
+                    <input type="text" id="newCollectionInput" class="input-styled sidebar-input" placeholder="New Collection Name" autocomplete="off" aria-label="New collection name">
+                    <button class="btn btn-secondary animated-btn btn-sm" onclick="createNewCollection()" style="width: 100%; margin-top: 8px;">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                        <span>Create</span>
+                    </button>
+                </div>
+            </div>
+            <div class="fav-main">
+                <div class="modal-header-standard fav-main-header">
+                    <h2 class="modal-heading" id="activeCollectionTitle">All Saved Books</h2>
+                    <button class="btn btn-secondary animated-btn btn-icon-only" onclick="closeFavoritesModal()" aria-label="Close">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+                    </button>
+                </div>
+                <div class="fav-grid-container" id="favoritesGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const target = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', target);
+            localStorage.setItem('theme', target);
+        }
+
+        const ICONS = {
+            heartOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+            heartFilled: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+            trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6"/></svg>',
+            chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+            x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+        };
+
+        const NO_COVER_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450">' +
+            '<rect width="300" height="450" fill="#2b2721"/>' +
+            '<text x="150" y="225" fill="#8f897b" font-family="Georgia, serif" font-size="26" text-anchor="middle" dominant-baseline="middle">No Cover</text>' +
+            '</svg>'
+        );
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+        }
+
+        function safeParse(raw, fallback) {
+            try {
+                const value = JSON.parse(raw);
+                return value === null || value === undefined ? fallback : value;
+            } catch (e) {
+                return fallback;
+            }
+        }
+
+        function btnFavMarkup(isFav) {
+            const icon = isFav ? ICONS.heartFilled : ICONS.heartOutline;
+            return '<span class="btn-icon">' + icon + '</span><span>' + (isFav ? 'Favorited' : 'Favorite') + '</span>';
+        }
+
+        function formatYear(year) {
+            const n = Number(year);
+            return Number.isFinite(n) && n > 0 ? String(n) : 'N/A';
+        }
+
+        function fetchWithTimeout(url, ms) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), ms);
+            return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+        }
+
+        function athCoverFallback(img) {
+            img.onerror = null;
+            img.src = NO_COVER_IMG;
+        }
+
+        function dismissFlash(el) {
+            if (!el || el.dataset.athLeaving) return;
+            el.dataset.athLeaving = '1';
+            el.classList.add('ath-leaving');
+            setTimeout(() => el.remove(), 400);
+        }
+
+        function initFlashToasts() {
+            document.querySelectorAll('.flash-messages .flash-msg').forEach(msg => {
+                const close = document.createElement('button');
+                close.type = 'button';
+                close.className = 'ath-toast-close';
+                close.setAttribute('aria-label', 'Dismiss notification');
+                close.innerHTML = ICONS.x;
+                close.addEventListener('click', () => dismissFlash(msg));
+                msg.appendChild(close);
+                setTimeout(() => dismissFlash(msg), 6000);
+            });
+        }
+
+        function animateStatCount() {
+            const el = document.getElementById('statTotal');
+            if (!el) return;
+            const target = parseInt(el.textContent, 10);
+            if (!Number.isFinite(target) || target <= 0) return;
+            const duration = 900;
+            const start = performance.now();
+            const tick = (now) => {
+                const progress = Math.min((now - start) / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+                el.textContent = Math.round(target * eased);
+                if (progress < 1) requestAnimationFrame(tick);
+                else el.textContent = target;
+            };
+            el.textContent = '0';
+            requestAnimationFrame(tick);
+        }
+
+        function focusLibrarySearch() {
+            const input = document.getElementById('librarySearch');
+            if (input) { input.focus(); input.select(); }
+        }
+
+        function paintRatingForms() {
+            document.querySelectorAll('.rating-form').forEach(form => {
+                const stars = Array.from(form.querySelectorAll('.star-btn'));
+                const current = Number(form.dataset.current || 0);
+                const paint = (n) => stars.forEach(s => s.classList.toggle('star-filled', Number(s.dataset.value) <= n));
+                paint(current);
+                stars.forEach(s => {
+                    s.addEventListener('mouseenter', () => paint(Number(s.dataset.value)));
+                    s.addEventListener('focus', () => paint(Number(s.dataset.value)));
+                });
+                form.addEventListener('mouseleave', () => paint(current));
+                form.addEventListener('focusout', () => paint(current));
+            });
+        }
+
+        function closeAllSelects(except) {
+            document.querySelectorAll('.custom-select-wrapper.open').forEach(w => {
+                if (w !== except) w.classList.remove('open');
+            });
+        }
+
+        function positionDropdown(wrapper) {
+            const opts = wrapper.querySelector('.custom-select-options');
+            const trigger = wrapper.querySelector('.custom-select-trigger');
+            if (!opts || !trigger) return;
+
+            wrapper.classList.remove('drop-up');
+            opts.style.maxHeight = '';
+
+            const rect = trigger.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom - 14;
+            const spaceAbove = rect.top - 14;
+            const natural = opts.scrollHeight;
+
+            if (natural <= spaceBelow) {
+                opts.style.maxHeight = 'none';
+            } else if (spaceAbove > spaceBelow && spaceAbove >= 150) {
+                wrapper.classList.add('drop-up');
+                opts.style.maxHeight = Math.min(natural, spaceAbove) + 'px';
+            } else {
+                opts.style.maxHeight = Math.max(150, Math.min(natural, spaceBelow)) + 'px';
+            }
+        }
+
+        function selectOption(wrapper, option) {
+            const value = option.hasAttribute('data-value')
+                ? option.getAttribute('data-value')
+                : option.textContent.trim();
+
+            const hidden = wrapper.querySelector('input[type="hidden"]');
+            if (hidden) hidden.value = value;
+
+            const label = wrapper.querySelector('.custom-select-trigger > span:first-child');
+            if (label) label.textContent = option.textContent.trim();
+
+            wrapper.querySelectorAll('.custom-option.selected-option')
+                .forEach(o => o.classList.remove('selected-option'));
+            option.classList.add('selected-option');
+            wrapper.classList.remove('open');
+
+            if (wrapper.dataset.submit === 'filter') {
+                const form = document.getElementById('filterForm');
+                if (form) form.submit();
+            }
+            if (wrapper.dataset.favKey) {
+                changeBookCollection(wrapper.dataset.favKey, value);
+            }
+        }
+
+        let favorites = safeParse(localStorage.getItem('savedBooksData'), []);
+        let collections = safeParse(localStorage.getItem('savedCollections'), ['Uncategorized']);
+        if (!Array.isArray(favorites)) favorites = [];
+        if (!Array.isArray(collections) || collections.length === 0) collections = ['Uncategorized'];
+        let activeCollection = 'All';
+
+        const apiModal = document.getElementById('apiModal');
+        const searchView = document.getElementById('searchView');
+        const detailsView = document.getElementById('detailsView');
+        const resultsContainer = document.getElementById('apiResultsContainer');
+        let currentActiveBook = null;
+        let descController = null;
+
+        function syncFavCount() {
+            const el = document.getElementById('favCount');
+            if (el) el.textContent = favorites.length;
+        }
+
+        function initCollectionsSystem() {
+            if (!collections.includes('Uncategorized')) collections.push('Uncategorized');
+            syncFavCount();
+        }
+
+        function openFavoritesModal() {
+            document.getElementById('favoritesModalOverlay').classList.add('active');
+            renderCollectionsSidebar();
+            renderFavoritesGrid(activeCollection);
+        }
+
+        function closeFavoritesModal() {
+            document.getElementById('favoritesModalOverlay').classList.remove('active');
+        }
+
+        function createNewCollection() {
+            const input = document.getElementById('newCollectionInput');
+            const val = input.value.trim();
+            if (val && !collections.includes(val)) {
+                collections.push(val);
+                localStorage.setItem('savedCollections', JSON.stringify(collections));
+                input.value = '';
+                renderCollectionsSidebar();
+            }
+        }
+
+        function deleteCollection(colName) {
+            if (colName === 'All' || colName === 'Uncategorized') return;
+
+            const affected = favorites.filter(f => (f.collection || 'Uncategorized') === colName);
+            const msg = affected.length > 0
+                ? `Delete collection "${colName}"?\n\n${affected.length} saved book${affected.length > 1 ? 's' : ''} in it will be moved to "Uncategorized".\nThe books themselves will NOT be deleted.`
+                : `Delete collection "${colName}"?`;
+
+            if (!confirm(msg)) return;
+
+            affected.forEach(f => { f.collection = 'Uncategorized'; });
+            collections = collections.filter(c => c !== colName);
+            localStorage.setItem('savedCollections', JSON.stringify(collections));
+            localStorage.setItem('savedBooksData', JSON.stringify(favorites));
+
+            if (activeCollection === colName) activeCollection = 'All';
+
+            renderCollectionsSidebar();
+            renderFavoritesGrid(activeCollection);
+        }
+
+        function setCollectionFilter(colName) {
+            activeCollection = colName;
+            renderCollectionsSidebar();
+            renderFavoritesGrid(colName);
+        }
+
+        function renderCollectionsSidebar() {
+            const list = document.getElementById('collectionsSidebarList');
+            list.innerHTML = '';
+
+            const allLi = document.createElement('li');
+            allLi.textContent = 'All Books';
+            allLi.className = activeCollection === 'All' ? 'active-col' : '';
+            allLi.onclick = () => setCollectionFilter('All');
+            list.appendChild(allLi);
+
+            collections.forEach(col => {
+                const isProtected = (col === 'Uncategorized');
+
+                const li = document.createElement('li');
+                li.className = activeCollection === col ? 'active-col' : '';
+                li.onclick = () => setCollectionFilter(col);
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'col-name';
+                nameSpan.textContent = col;
+                if (isProtected) nameSpan.title = 'Default collection — cannot be deleted';
+                li.appendChild(nameSpan);
+
+                if (!isProtected) {
+                    const count = favorites.filter(f => (f.collection || 'Uncategorized') === col).length;
+                    const del = document.createElement('button');
+                    del.type = 'button';
+                    del.className = 'col-delete-btn';
+                    del.innerHTML = ICONS.x;
+                    del.title = count > 0
+                        ? `Delete "${col}" — ${count} book${count > 1 ? 's' : ''} will move to Uncategorized`
+                        : `Delete "${col}"`;
+                    del.setAttribute('aria-label', 'Delete collection ' + col);
+                    del.onclick = (e) => { e.stopPropagation(); deleteCollection(col); };
+                    li.appendChild(del);
+                }
+
+                list.appendChild(li);
+            });
+        }
+
+        function renderFavoritesGrid(filterCollection) {
+            document.getElementById('activeCollectionTitle').textContent =
+                filterCollection === 'All' ? 'All Saved Books' : filterCollection;
+            const grid = document.getElementById('favoritesGrid');
+            grid.innerHTML = '';
+
+            const filtered = filterCollection === 'All'
+                ? favorites
+                : favorites.filter(f => (f.collection || 'Uncategorized') === filterCollection);
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div class="empty-note" style="grid-column: 1/-1;">No books found in this collection.</div>';
+                return;
+            }
+
+            filtered.forEach(fav => {
+                const coverUrl = fav.coverId
+                    ? `https://covers.openlibrary.org/b/id/${fav.coverId}-M.jpg`
+                    : NO_COVER_IMG;
+                const currentCollection = fav.collection || 'Uncategorized';
+                const keyAttr = escapeHtml(fav.workKey);
+
+                const optionsHtml = collections.map(c => `
+                    <div class="custom-option ${c === currentCollection ? 'selected-option' : ''}" data-value="${escapeHtml(c)}">${escapeHtml(c)}</div>
+                `).join('');
+
+                const card = document.createElement('div');
+                card.className = 'fav-card fade-in-element';
+                card.innerHTML = `
+                    <img src="${coverUrl}" alt="Cover" class="fav-card-cover" loading="lazy" onerror="athCoverFallback(this)" onclick="viewFavoriteDetails('${keyAttr}')">
+                    <div class="fav-card-info">
+                        <div class="fav-card-title" title="${escapeHtml(fav.title)}">${escapeHtml(fav.title)}</div>
+                        <div class="fav-card-author">${escapeHtml(fav.author)}</div>
+                        <div class="custom-select-wrapper fav-card-select" data-fav-key="${keyAttr}">
+                            <div class="custom-select-trigger">
+                                <span>${escapeHtml(currentCollection)}</span>
+                                <span class="select-arrow">${ICONS.chevron}</span>
+                            </div>
+                            <div class="custom-select-options">${optionsHtml}</div>
+                            <input type="hidden" value="${escapeHtml(currentCollection)}">
+                        </div>
+                        <button type="button" class="btn btn-danger-outline animated-btn btn-sm" style="width: 100%; margin-top: 8px;" onclick="removeFavoriteBook('${keyAttr}')">
+                            <span class="btn-icon">${ICONS.trash}</span>
+                            <span>Remove</span>
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function changeBookCollection(workKey, newCollection) {
+            const book = favorites.find(f => f.workKey === workKey);
+            if (book) {
+                book.collection = newCollection;
+                localStorage.setItem('savedBooksData', JSON.stringify(favorites));
+                renderFavoritesGrid(activeCollection);
+            }
+        }
+
+        function removeFavoriteBook(workKey) {
+            favorites = favorites.filter(f => f.workKey !== workKey);
+            localStorage.setItem('savedBooksData', JSON.stringify(favorites));
+            syncFavCount();
+            renderFavoritesGrid(activeCollection);
+
+            if (currentActiveBook && currentActiveBook.workKey === workKey) {
+                const favBtn = document.getElementById('detFavBtn');
+                favBtn.innerHTML = btnFavMarkup(false);
+                favBtn.style.borderColor = '';
+            }
+        }
+
+        function viewFavoriteDetails(workKey) {
+            const fav = favorites.find(f => f.workKey === workKey);
+            if (fav) {
+                closeFavoritesModal();
+                openModal();
+                showDetails(fav.title, fav.author, fav.year, fav.genre, fav.coverId, fav.workKey);
+            }
+        }
+
+        function openModal() {
+            apiModal.classList.add('active');
+            searchView.classList.add('active');
+            detailsView.classList.remove('active');
+            if (!resultsContainer.dataset.used) {
+                resultsContainer.innerHTML = '<p class="empty-note">Search the global database to discover books to add.</p>';
+            }
+        }
+
+        function closeModal() {
+            apiModal.classList.remove('active');
+        }
+
+        function backToSearch() {
+            detailsView.classList.remove('active');
+            searchView.classList.add('active');
+        }
+
+        async function searchAPI() {
+            const query = document.getElementById('apiSearchInput').value.trim();
+            const genre = document.getElementById('apiGenreValue').value;
+            if (!query && !genre) {
+                resultsContainer.innerHTML = '<p class="empty-note">Type a title, author, or keyword to begin exploring.</p>';
+                return;
+            }
+
+            const searchBtn = document.getElementById('apiSearchBtn');
+            searchBtn.disabled = true;
+            resultsContainer.dataset.used = '1';
+            resultsContainer.innerHTML = '<div class="ath-skeleton"></div><div class="ath-skeleton"></div><div class="ath-skeleton"></div><div class="ath-skeleton"></div>';
+
+            let url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query || '*')}&limit=20`;
+            if (genre) url += `&subject=${encodeURIComponent(genre)}`;
+
+            try {
+                const response = await fetchWithTimeout(url, 15000);
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const data = await response.json();
+                const docs = Array.isArray(data && data.docs) ? data.docs : [];
+                const books = docs.filter(b => b.title && b.author_name && b.author_name.length);
+                resultsContainer.innerHTML = '';
+
+                if (books.length === 0) {
+                    resultsContainer.innerHTML = '<p class="empty-note">No books found. Try different keywords.</p>';
+                    return;
+                }
+
+                const count = document.createElement('div');
+                count.className = 'ath-result-count';
+                count.textContent = `${books.length} result${books.length === 1 ? '' : 's'} found`;
+                resultsContainer.appendChild(count);
+
+                books.slice(0, 10).forEach((book, index) => {
+                    const title = book.title;
+                    const author = book.author_name[0];
+                    const year = book.first_publish_year || '0';
+                    const bGenre = book.subject && book.subject.length ? book.subject[0] : (genre || 'General');
+                    const coverId = book.cover_i || null;
+                    const workKey = book.key;
+
+                    const item = document.createElement('div');
+                    item.className = 'api-result-item fade-in-element';
+                    item.style.animationDelay = `${index * 60}ms`;
+                    item.setAttribute('role', 'button');
+                    item.tabIndex = 0;
+                    item.innerHTML = `
+                        <div>
+                            <div class="api-title">${escapeHtml(title)}</div>
+                            <div class="api-result-meta">By ${escapeHtml(author)} • ${formatYear(year)}</div>
+                        </div>
+                        <span class="badge-genre">${escapeHtml(bGenre)}</span>
+                    `;
+                    const open = () => showDetails(title, author, year, bGenre, coverId, workKey);
+                    item.addEventListener('click', open);
+                    item.addEventListener('keydown', (ev) => {
+                        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+                    });
+                    resultsContainer.appendChild(item);
+                });
+            } catch (e) {
+                resultsContainer.innerHTML = '<p class="error-note">Could not reach the global database. Check your connection and try again.</p>';
+            } finally {
+                searchBtn.disabled = false;
+            }
+        }
+
+        async function showDetails(title, author, year, genre, coverId, workKey) {
+            currentActiveBook = { title, author, year, genre, coverId, workKey };
+
+            if (descController) descController.abort();
+            descController = new AbortController();
+            const signal = descController.signal;
+
+            searchView.classList.remove('active');
+            detailsView.classList.add('active');
+
+            const coverUrl = coverId
+                ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`
+                : NO_COVER_IMG;
+
+            document.getElementById('detHeader').style.backgroundImage = `url("${coverUrl}")`;
+            document.getElementById('detCover').src = coverUrl;
+            document.getElementById('detTitle').textContent = title;
+            document.getElementById('detAuthor').textContent = `By ${author} • ${formatYear(year)}`;
+            document.getElementById('detGenre').textContent = genre;
+
+            const isFav = favorites.some(f => f.workKey === workKey);
+            const favBtn = document.getElementById('detFavBtn');
+            favBtn.innerHTML = btnFavMarkup(isFav);
+            favBtn.style.borderColor = isFav ? 'var(--primary)' : '';
+
+            const addBtn = document.getElementById('detAddBtn');
+            addBtn.disabled = false;
+            addBtn.onclick = () => addExternalBook(title, author, year, genre);
+
+            const desc = document.getElementById('detDesc');
+            desc.innerHTML = '<p class="fade-in-element">Fetching description…</p>';
+
+            try {
+                const res = await fetch(`https://openlibrary.org${workKey}.json`, { signal });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const workData = await res.json();
+                if (signal.aborted) return;
+
+                let text = '';
+                if (workData.description) {
+                    text = typeof workData.description === 'string'
+                        ? workData.description
+                        : (workData.description.value || '');
+                }
+
+                if (text) {
+                    const p = document.createElement('p');
+                    p.className = 'fade-in-element';
+                    p.textContent = text;
+                    desc.innerHTML = '';
+                    desc.appendChild(p);
+                } else {
+                    desc.innerHTML = '<p class="fade-in-element" style="color:var(--text-muted);">No description available.</p>';
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') return;
+                desc.innerHTML = '<p style="color:var(--text-muted);">Could not fetch description.</p>';
+            }
+        }
+
+        function toggleFavorite() {
+            if (!currentActiveBook) return;
+            const key = currentActiveBook.workKey;
+            const idx = favorites.findIndex(f => f.workKey === key);
+            const favBtn = document.getElementById('detFavBtn');
+
+            if (idx > -1) {
+                removeFavoriteBook(key);
+                return;
+            }
+
+            favorites.push({
+                workKey: key,
+                title: currentActiveBook.title,
+                author: currentActiveBook.author,
+                year: currentActiveBook.year,
+                genre: currentActiveBook.genre,
+                coverId: currentActiveBook.coverId,
+                collection: 'Uncategorized'
+            });
+            localStorage.setItem('savedBooksData', JSON.stringify(favorites));
+            favBtn.innerHTML = btnFavMarkup(true);
+            favBtn.style.borderColor = 'var(--primary)';
+            syncFavCount();
+        }
+
+        function addExternalBook(title, author, year, genre) {
+            const btn = document.getElementById('detAddBtn');
+            if (btn.disabled) return;
+            btn.disabled = true;
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = "{{ url_for('add') }}";
+
+            const fields = { title, author, year, genre };
+            Object.keys(fields).forEach(key => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = fields[key] === null || fields[key] === undefined ? '' : String(fields[key]);
+                form.appendChild(input);
+            });
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.addEventListener('click', (e) => {
+                const option = e.target.closest('.custom-option');
+                if (option) {
+                    const wrapper = option.closest('.custom-select-wrapper');
+                    if (wrapper) { selectOption(wrapper, option); return; }
+                }
+
+                const trigger = e.target.closest('.custom-select-trigger');
+                if (trigger) {
+                    const wrapper = trigger.closest('.custom-select-wrapper');
+                    if (wrapper) {
+                        const wasOpen = wrapper.classList.contains('open');
+                        closeAllSelects();
+                        if (!wasOpen) {
+                            wrapper.classList.add('open');
+                            positionDropdown(wrapper);
+                        }
+                        return;
+                    }
+                }
+
+                closeAllSelects();
+            });
+
+            document.querySelectorAll('.custom-select-wrapper').forEach(wrapper => {
+                const hidden = wrapper.querySelector('input[type="hidden"]');
+                if (!hidden || !hidden.value) return;
+                wrapper.querySelectorAll('.custom-option').forEach(o => {
+                    if (o.getAttribute('data-value') === hidden.value) o.classList.add('selected-option');
+                });
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeAllSelects();
+                    closeModal();
+                    closeFavoritesModal();
+                    return;
+                }
+                const tag = (e.target.tagName || '').toLowerCase();
+                const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+                if (typing) return;
+                if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) {
+                    e.preventDefault();
+                    focusLibrarySearch();
+                }
+            });
+
+            apiModal.addEventListener('click', (e) => {
+                if (e.target === apiModal) closeModal();
+            });
+            document.getElementById('favoritesModalOverlay').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) closeFavoritesModal();
+            });
+
+            apiModal.addEventListener('scroll', () => closeAllSelects(), true);
+            document.getElementById('favoritesModalOverlay').addEventListener('scroll', () => closeAllSelects(), true);
+            window.addEventListener('resize', () => closeAllSelects());
+
+            document.getElementById('apiSearchInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); searchAPI(); }
+            });
+
+            document.getElementById('newCollectionInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); createNewCollection(); }
+            });
+
+            document.querySelectorAll('form.inline-form').forEach(form => {
+                form.addEventListener('submit', () => {
+                    const btn = form.querySelector('button[type="submit"]');
+                    if (btn) btn.disabled = true;
+                });
+            });
+
+            initFlashToasts();
+            animateStatCount();
+            paintRatingForms();
+            initCollectionsSystem();
+        });
+    </script>
+</body>
+</html>

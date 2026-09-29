@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Create an Athenaeum account to rate books in your catalog.">
+    <title>Sign Up — Athenaeum</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f6b62'/%3E%3Cpath d='M20 15h9a6 6 0 0 1 6 6 6 6 0 0 1 6-6h9v28h-9a6 6 0 0 0-6 6 6 6 0 0 0-6-6h-9z' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .flash-msg{display:flex;align-items:flex-start;gap:10px;transition:opacity .35s ease,transform .35s ease}
+        .flash-msg.ath-leaving{opacity:0;transform:translateY(-8px)}
+        .ath-toast-close{margin-left:auto;flex:none;background:transparent;border:0;color:inherit;opacity:.55;cursor:pointer;padding:2px 4px;line-height:0}
+        .ath-toast-close:hover{opacity:1}
+        .ath-toast-close svg{width:14px;height:14px}
+        .auth-note{font-size:.85rem;opacity:.65;margin:-6px 0 18px}
+        .auth-switch{font-size:.85rem;opacity:.75;text-align:center;margin-top:18px}
+        .auth-switch a{font-weight:700}
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+</head>
+<body>
+    <div class="app-container page-enter-animation" style="max-width: 460px;">
+        <header class="app-header">
+            <div>
+                <h1 class="brand-title">Athenaeum</h1>
+                <p class="brand-subtitle">Create Account</p>
+            </div>
+            <button class="theme-toggle animated-btn" onclick="toggleTheme()" aria-label="Toggle color theme">
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.4"/><path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></svg>
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 14.1A8.6 8.6 0 0 1 9.9 3.4a8.6 8.6 0 1 0 10.7 10.7z"/></svg>
+            </button>
+        </header>
+
+        <main class="main-card">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages" role="status" aria-live="polite">
+                        {% for category, message in messages %}
+                            <div class="flash-msg flash-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <h2 class="page-title">Join Athenaeum</h2>
+            <p class="auth-note">Sign up to unlock star ratings for every book in your collection.</p>
+            <form method="POST" action="{{ url_for('signup') }}" class="stacked-form">
+                <div class="form-field">
+                    <label class="form-label" for="username">Username</label>
+                    <input type="text" id="username" name="username" class="input-styled" placeholder="e.g. bookworm_42" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}" title="3-32 characters: letters, numbers, dots, dashes, underscores" autocomplete="username" autofocus>
+                </div>
+
+                <div class="form-field">
+                    <label class="form-label" for="password">Password</label>
+                    <input type="password" id="password" name="password" class="input-styled" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password">
+                </div>
+
+                <div class="form-field">
+                    <label class="form-label" for="confirm">Confirm Password</label>
+                    <input type="password" id="confirm" name="confirm" class="input-styled" placeholder="Repeat your password" required minlength="6" autocomplete="new-password">
+                </div>
+
+                <div class="form-actions">
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary animated-btn">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit" class="btn btn-primary animated-btn">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                        <span>Create Account</span>
+                    </button>
+                </div>
+            </form>
+
+            <p class="auth-switch">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+        </main>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const target = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', target);
+            localStorage.setItem('theme', target);
+        }
+
+        function dismissFlash(el) {
+            if (!el || el.dataset.athLeaving) return;
+            el.dataset.athLeaving = '1';
+            el.classList.add('ath-leaving');
+            setTimeout(() => el.remove(), 400);
+        }
+
+        document.querySelectorAll('.flash-messages .flash-msg').forEach(msg => {
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'ath-toast-close';
+            close.setAttribute('aria-label', 'Dismiss notification');
+            close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+            close.addEventListener('click', () => dismissFlash(msg));
+            msg.appendChild(close);
+            setTimeout(() => dismissFlash(msg), 6000);
+        });
+    </script>
+</body>
+</html>

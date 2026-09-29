@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Edit a book in your Athenaeum catalog.">
+    <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#14110d" media="(prefers-color-scheme: dark)">
+    <title>Edit Book — Athenaeum</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f6b62'/%3E%3Cpath d='M20 15h9a6 6 0 0 1 6 6 6 6 0 0 1 6-6h9v28h-9a6 6 0 0 0-6 6 6 6 0 0 0-6-6h-9z' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .flash-msg{display:flex;align-items:flex-start;gap:10px;transition:opacity .35s ease,transform .35s ease}
+        .flash-msg.ath-leaving{opacity:0;transform:translateY(-8px)}
+        .ath-toast-close{margin-left:auto;flex:none;background:transparent;border:0;color:inherit;opacity:.55;cursor:pointer;padding:2px 4px;line-height:0}
+        .ath-toast-close:hover{opacity:1}
+        .ath-toast-close svg{width:14px;height:14px}
+        .ath-shake{animation:ath-shake .45s ease}
+        @keyframes ath-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+        @media (prefers-reduced-motion:reduce){.ath-shake{animation:none}}
+    </style>
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+</head>
+<body>
+    <div class="app-container page-enter-animation" style="max-width: 660px;">
+        <header class="app-header">
+            <div>
+                <h1 class="brand-title">Athenaeum</h1>
+                <p class="brand-subtitle">Editing Record #{{ book['id'] }}</p>
+            </div>
+            <button class="theme-toggle animated-btn" onclick="toggleTheme()" aria-label="Toggle color theme">
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.4"/><path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></svg>
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 14.1A8.6 8.6 0 0 1 9.9 3.4a8.6 8.6 0 1 0 10.7 10.7z"/></svg>
+            </button>
+        </header>
+
+        <main class="main-card">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages" role="status" aria-live="polite">
+                        {% for category, message in messages %}
+                            <div class="flash-msg flash-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <h2 class="page-title">Edit Book Entry</h2>
+            <form method="POST" action="{{ url_for('edit', id=book['id']) }}" class="stacked-form" onsubmit="return validateGenre(event)">
+
+                <div class="form-field">
+                    <label class="form-label" for="title">Book Title</label>
+                    <input type="text" id="title" name="title" class="input-styled" value="{{ book['title'] }}" required maxlength="200" autocomplete="off">
+                </div>
+
+                <div class="form-field">
+                    <label class="form-label" for="author">Author</label>
+                    <input type="text" id="author" name="author" class="input-styled" value="{{ book['author'] }}" required maxlength="120" autocomplete="off">
+                </div>
+
+                <div class="form-field-row">
+                    <div class="form-field">
+                        <label class="form-label" for="year">Year</label>
+                        <input type="number" id="year" name="year" class="input-styled" value="{{ book['year'] }}" min="0" max="9999" required autocomplete="off">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Genre</label>
+                        <div class="custom-select-wrapper" id="genreWrapper">
+                            <div class="custom-select-trigger">
+                                <span id="genreLabel">{{ book['genre'] }}</span>
+                                <span class="select-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+                            </div>
+                            <div class="custom-select-options">
+                                <div class="custom-option" data-value="Fiction">Fiction</div>
+                                <div class="custom-option" data-value="Non-Fiction">Non-Fiction</div>
+                                <div class="custom-option" data-value="Fantasy">Fantasy</div>
+                                <div class="custom-option" data-value="Science Fiction">Science Fiction</div>
+                                <div class="custom-option" data-value="Mystery">Mystery</div>
+                                <div class="custom-option" data-value="Thriller">Thriller</div>
+                                <div class="custom-option" data-value="Romance">Romance</div>
+                                <div class="custom-option" data-value="History">History</div>
+                                <div class="custom-option" data-value="Science">Science</div>
+                                <div class="custom-option" data-value="Biography">Biography</div>
+                                <div class="custom-option" data-value="Other">Other</div>
+                            </div>
+                            <input type="hidden" name="genre" id="genreInput" value="{{ book['genre'] }}">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary animated-btn">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit" class="btn btn-primary animated-btn">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+                        <span>Update Entry</span>
+                    </button>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const target = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', target);
+            localStorage.setItem('theme', target);
+        }
+
+        function validateGenre(e) {
+            const hidden = document.getElementById('genreInput');
+            const wrapper = document.getElementById('genreWrapper');
+            const label = document.getElementById('genreLabel');
+            if (!hidden.value) {
+                e.preventDefault();
+                label.textContent = 'Please choose a genre…';
+                wrapper.classList.add('open');
+                positionDropdown(wrapper);
+                wrapper.classList.remove('ath-shake');
+                void wrapper.offsetWidth;
+                wrapper.classList.add('ath-shake');
+                setTimeout(() => wrapper.classList.remove('ath-shake'), 500);
+                return false;
+            }
+            const submitter = e.submitter || document.querySelector('button[type="submit"]');
+            if (submitter) submitter.disabled = true;
+            return true;
+        }
+
+        function dismissFlash(el) {
+            if (!el || el.dataset.athLeaving) return;
+            el.dataset.athLeaving = '1';
+            el.classList.add('ath-leaving');
+            setTimeout(() => el.remove(), 400);
+        }
+
+        function initFlashToasts() {
+            document.querySelectorAll('.flash-messages .flash-msg').forEach(msg => {
+                const close = document.createElement('button');
+                close.type = 'button';
+                close.className = 'ath-toast-close';
+                close.setAttribute('aria-label', 'Dismiss notification');
+                close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+                close.addEventListener('click', () => dismissFlash(msg));
+                msg.appendChild(close);
+                setTimeout(() => dismissFlash(msg), 6000);
+            });
+        }
+
+        function closeAllSelects(except) {
+            document.querySelectorAll('.custom-select-wrapper.open').forEach(w => {
+                if (w !== except) w.classList.remove('open');
+            });
+        }
+
+        function positionDropdown(wrapper) {
+            const opts = wrapper.querySelector('.custom-select-options');
+            const trigger = wrapper.querySelector('.custom-select-trigger');
+            if (!opts || !trigger) return;
+
+            wrapper.classList.remove('drop-up');
+            opts.style.maxHeight = '';
+
+            const rect = trigger.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom - 14;
+            const spaceAbove = rect.top - 14;
+            const natural = opts.scrollHeight;
+
+            if (natural <= spaceBelow) {
+                opts.style.maxHeight = 'none';
+            } else if (spaceAbove > spaceBelow && spaceAbove >= 150) {
+                wrapper.classList.add('drop-up');
+                opts.style.maxHeight = Math.min(natural, spaceAbove) + 'px';
+            } else {
+                opts.style.maxHeight = Math.max(150, Math.min(natural, spaceBelow)) + 'px';
+            }
+        }
+
+        function selectOption(wrapper, option) {
+            const value = option.hasAttribute('data-value')
+                ? option.getAttribute('data-value')
+                : option.textContent.trim();
+
+            const hidden = wrapper.querySelector('input[type="hidden"]');
+            if (hidden) hidden.value = value;
+
+            const label = wrapper.querySelector('.custom-select-trigger > span:first-child');
+            if (label) label.textContent = option.textContent.trim();
+
+            wrapper.querySelectorAll('.custom-option.selected-option')
+                .forEach(o => o.classList.remove('selected-option'));
+            option.classList.add('selected-option');
+            wrapper.classList.remove('open');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.addEventListener('click', (e) => {
+                const option = e.target.closest('.custom-option');
+                if (option) {
+                    const wrapper = option.closest('.custom-select-wrapper');
+                    if (wrapper) { selectOption(wrapper, option); return; }
+                }
+
+                const trigger = e.target.closest('.custom-select-trigger');
+                if (trigger) {
+                    const wrapper = trigger.closest('.custom-select-wrapper');
+                    if (wrapper) {
+                        const wasOpen = wrapper.classList.contains('open');
+                        closeAllSelects();
+                        if (!wasOpen) {
+                            wrapper.classList.add('open');
+                            positionDropdown(wrapper);
+                        }
+                        return;
+                    }
+                }
+
+                closeAllSelects();
+            });
+
+            document.querySelectorAll('.custom-select-wrapper').forEach(wrapper => {
+                const hidden = wrapper.querySelector('input[type="hidden"]');
+                if (!hidden || !hidden.value) return;
+                wrapper.querySelectorAll('.custom-option').forEach(o => {
+                    if (o.getAttribute('data-value') === hidden.value) o.classList.add('selected-option');
+                });
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeAllSelects();
+            });
+
+            window.addEventListener('resize', () => closeAllSelects());
+
+            initFlashToasts();
+
+            const title = document.getElementById('title');
+            if (title) title.focus();
+        });
+    </script>
+</body>
+</html>
